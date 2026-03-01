@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -76,8 +74,8 @@ class _DestinationBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final topInset = MediaQuery.of(context).padding.top;
-    final screenH = MediaQuery.of(context).size.height;
+    final topInset = MediaQuery.paddingOf(context).top;
+    final screenH = MediaQuery.sizeOf(context).height;
     final heroH = screenH * 0.45;
     // Ribbon is ~70px tall. We want 32px overlap with hero.
     // Extra space below hero for visible ribbon portion = 70 - 32 = 38
@@ -167,35 +165,28 @@ class _DestinationBody extends ConsumerWidget {
                                   textAlign: TextAlign.center,
                                 ),
                                 const SizedBox(height: 8),
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(50),
-                                  child: BackdropFilter(
-                                    filter: ImageFilter.blur(
-                                        sigmaX: 8, sigmaY: 8),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 16, vertical: 6),
-                                      decoration: BoxDecoration(
-                                        color: Colors.black
-                                            .withValues(alpha: 0.25),
-                                        borderRadius:
-                                            BorderRadius.circular(50),
-                                      ),
-                                      child: Text(
-                                        [
-                                          if (dest.province != null)
-                                            dest.province!,
-                                          if (_altitudeLabel.isNotEmpty)
-                                            _altitudeLabel,
-                                        ].join(' | '),
-                                        style: GoogleFonts.inter(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w500,
-                                          color: Colors.white
-                                              .withValues(alpha: 0.9),
-                                          letterSpacing: 1.5,
-                                        ),
-                                      ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 16, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black
+                                        .withValues(alpha: 0.4),
+                                    borderRadius:
+                                        BorderRadius.circular(50),
+                                  ),
+                                  child: Text(
+                                    [
+                                      if (dest.province != null)
+                                        dest.province!,
+                                      if (_altitudeLabel.isNotEmpty)
+                                        _altitudeLabel,
+                                    ].join(' | '),
+                                    style: GoogleFonts.inter(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.white
+                                          .withValues(alpha: 0.9),
+                                      letterSpacing: 1.5,
                                     ),
                                   ),
                                 ),
@@ -403,27 +394,16 @@ class _UtilityRibbon extends ConsumerWidget {
     );
     final isLoading = asyncWeather.isLoading;
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(
-            color: TourPakColors.forestGreen.withValues(alpha: 0.5),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: TourPakColors.goldAction.withValues(alpha: 0.1),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.3),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: Row(
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: TourPakColors.forestGreen.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: TourPakColors.goldAction.withValues(alpha: 0.1),
+        ),
+      ),
+      child: Row(
             children: [
               // ── Weather side ──
               if (weatherIcon != null)
@@ -508,8 +488,6 @@ class _UtilityRibbon extends ConsumerWidget {
                   color: _DestinationBody._roadColor(dest.roadStatus)),
             ],
           ),
-        ),
-      ),
     );
   }
 }
@@ -611,6 +589,9 @@ class _HighlightCard extends StatelessWidget {
               CachedNetworkImage(
                 imageUrl: spot.heroImageUrl ?? '',
                 fit: BoxFit.cover,
+                memCacheWidth: 320,
+                memCacheHeight: 400,
+                fadeInDuration: const Duration(milliseconds: 200),
                 placeholder: (_, _) =>
                     Container(color: TourPakColors.forestGreen),
                 errorWidget: (_, _, _) => Container(
@@ -707,23 +688,17 @@ class _GlassCircleButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(50),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.3),
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.1),
-              ),
-            ),
-            child: Icon(icon, color: TourPakColors.textPrimary, size: 20),
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.4),
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.1),
           ),
         ),
+        child: Icon(icon, color: TourPakColors.textPrimary, size: 20),
       ),
     );
   }
@@ -743,35 +718,29 @@ class _CategoryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Container(
-            decoration: BoxDecoration(
-              color: TourPakColors.forestGreen.withValues(alpha: 0.4),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: TourPakColors.goldAction.withValues(alpha: 0.1),
+      child: Container(
+        decoration: BoxDecoration(
+          color: TourPakColors.forestGreen.withValues(alpha: 0.6),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: TourPakColors.goldAction.withValues(alpha: 0.1),
+          ),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(category.icon, color: category.color, size: 30),
+            const SizedBox(height: 8),
+            Text(
+              category.label.toUpperCase(),
+              style: GoogleFonts.inter(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: Colors.white.withValues(alpha: 0.8),
+                letterSpacing: 1.5,
               ),
             ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(category.icon, color: category.color, size: 30),
-                const SizedBox(height: 8),
-                Text(
-                  category.label.toUpperCase(),
-                  style: GoogleFonts.inter(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white.withValues(alpha: 0.8),
-                    letterSpacing: 1.5,
-                  ),
-                ),
-              ],
-            ),
-          ),
+          ],
         ),
       ),
     );

@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,13 +6,17 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:photo_view/photo_view_gallery.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/theme/colors.dart';
 import '../../../../core/widgets/cinematic_hero.dart';
 import '../../../../core/widgets/glass_card.dart';
 import '../../../../core/widgets/shared_widgets.dart';
 import '../../../../core/widgets/skeletons.dart';
+import '../../../../services/maps_service.dart';
+import '../../../weather/presentation/widgets/spot_weather_widget.dart';
 import '../../domain/entities/spot.dart';
 import '../notifiers/spot_notifier.dart';
 
@@ -83,7 +85,7 @@ class _LoadingView extends StatelessWidget {
 // MAIN CONTENT
 // ══════════════════════════════════════════════════════════════
 
-class _SpotDetailContent extends StatelessWidget {
+class _SpotDetailContent extends ConsumerStatefulWidget {
   final Spot spot;
   final String destinationId;
 
@@ -93,10 +95,48 @@ class _SpotDetailContent extends StatelessWidget {
   });
 
   @override
+  ConsumerState<_SpotDetailContent> createState() =>
+      _SpotDetailContentState();
+}
+
+class _SpotDetailContentState extends ConsumerState<_SpotDetailContent> {
+  bool _isSaved = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedState();
+  }
+
+  Future<void> _loadSavedState() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getStringList('saved_spots') ?? [];
+    if (mounted) {
+      setState(() => _isSaved = saved.contains(widget.spot.id));
+    }
+  }
+
+  Future<void> _toggleSave() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getStringList('saved_spots') ?? [];
+    if (_isSaved) {
+      saved.remove(widget.spot.id);
+    } else {
+      saved.add(widget.spot.id);
+    }
+    await prefs.setStringList('saved_spots', saved);
+    if (mounted) {
+      setState(() => _isSaved = !_isSaved);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final screenH = MediaQuery.of(context).size.height;
+    final spot = widget.spot;
+    final destinationId = widget.destinationId;
+    final screenH = MediaQuery.sizeOf(context).height;
     final heroH = screenH * 0.55;
-    final bottomInset = MediaQuery.of(context).padding.bottom;
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
 
     return Stack(
       children: [
@@ -204,7 +244,23 @@ class _SpotDetailContent extends StatelessWidget {
 
                     // ── Info Ribbon ────────────────────────────
                     _InfoRibbon(spot: spot),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
+
+                    // ── Weather at this location ────────────────
+                    if (spot.hasCoordinates) ...[
+                      Text(
+                        'Weather at this location',
+                        style: GoogleFonts.inter(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: TourPakColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      WeatherWidget(
+                          lat: spot.latitude!, lng: spot.longitude!),
+                      const SizedBox(height: 24),
+                    ],
 
                     // ── About ──────────────────────────────────
                     if (spot.description != null &&
@@ -218,6 +274,8 @@ class _SpotDetailContent extends StatelessWidget {
                     _ActionButtons(
                       spot: spot,
                       destinationId: destinationId,
+                      isSaved: _isSaved,
+                      onToggleSave: _toggleSave,
                     ),
                     const SizedBox(height: 24),
 
@@ -230,6 +288,18 @@ class _SpotDetailContent extends StatelessWidget {
                       _PhotoGallery(spot: spot),
                     if (spot.galleryUrls.isNotEmpty)
                       const SizedBox(height: 24),
+
+                    // ── Map & Directions ─────────────────────────
+                    if (spot.hasCoordinates) ...[
+                      _MapDirectionsSection(spot: spot),
+                      const SizedBox(height: 24),
+                    ],
+
+                    // ── Nearby Spots ─────────────────────────────
+                    _NearbySpotsSection(
+                      spot: spot,
+                      destinationId: destinationId,
+                    ),
 
                     // Bottom spacer
                     SizedBox(height: 80 + bottomInset),
@@ -261,7 +331,7 @@ class _TopNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final topInset = MediaQuery.of(context).padding.top;
+    final topInset = MediaQuery.paddingOf(context).top;
 
     return Padding(
       padding: EdgeInsets.only(
@@ -358,20 +428,16 @@ class _InfoRibbon extends StatelessWidget {
       ),
     ];
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          decoration: BoxDecoration(
-            color: TourPakColors.forestGreen.withValues(alpha: 0.5),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: TourPakColors.goldAction.withValues(alpha: 0.1),
-            ),
-          ),
-          child: Row(
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      decoration: BoxDecoration(
+        color: TourPakColors.forestGreen.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: TourPakColors.goldAction.withValues(alpha: 0.1),
+        ),
+      ),
+      child: Row(
             children: stats.asMap().entries.expand((entry) {
               final s = entry.value;
               final isLast = entry.key == stats.length - 1;
@@ -414,8 +480,6 @@ class _InfoRibbon extends StatelessWidget {
               ];
             }).toList(),
           ),
-        ),
-      ),
     );
   }
 }
@@ -498,10 +562,14 @@ class _DescriptionSectionState extends State<_DescriptionSection> {
 class _ActionButtons extends StatelessWidget {
   final Spot spot;
   final String destinationId;
+  final bool isSaved;
+  final VoidCallback onToggleSave;
 
   const _ActionButtons({
     required this.spot,
     required this.destinationId,
+    required this.isSaved,
+    required this.onToggleSave,
   });
 
   @override
@@ -513,11 +581,9 @@ class _ActionButtons extends StatelessWidget {
         color: TourPakColors.goldAction,
         onTap: () {
           if (spot.hasCoordinates) {
-            final url = Uri.parse(
-              'https://www.google.com/maps/dir/?api=1&destination='
-              '${spot.latitude},${spot.longitude}',
+            MapsService.openDirections(
+              spot.latitude!, spot.longitude!, spot.name,
             );
-            launchUrl(url, mode: LaunchMode.externalApplication);
           }
         },
       ),
@@ -530,13 +596,19 @@ class _ActionButtons extends StatelessWidget {
         },
       ),
       (
-        icon: Icons.bookmark_border_rounded,
-        label: 'Save',
+        icon: isSaved
+            ? Icons.bookmark_rounded
+            : Icons.bookmark_border_rounded,
+        label: isSaved ? 'Saved' : 'Save',
         color: const Color(0xFF34D399),
         onTap: () {
+          onToggleSave();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Saved ${spot.name}!',
+              content: Text(
+                  isSaved
+                      ? 'Removed ${spot.name}'
+                      : 'Saved ${spot.name}!',
                   style: GoogleFonts.inter(fontSize: 14)),
               backgroundColor: TourPakColors.forestLight,
               behavior: SnackBarBehavior.floating,
@@ -551,7 +623,17 @@ class _ActionButtons extends StatelessWidget {
         label: 'Weather',
         color: const Color(0xFFF97316),
         onTap: () {
-          context.push('/destination/$destinationId/weather');
+          final query = <String, String>{};
+          if (spot.hasCoordinates) {
+            query['lat'] = spot.latitude!.toString();
+            query['lng'] = spot.longitude!.toString();
+          }
+          query['name'] = spot.name;
+          final qs = query.entries
+              .map((e) =>
+                  '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}')
+              .join('&');
+          context.push('/destination/$destinationId/weather?$qs');
         },
       ),
     ];
@@ -565,35 +647,29 @@ class _ActionButtons extends StatelessWidget {
             padding: EdgeInsets.only(right: isLast ? 0 : 10),
             child: GestureDetector(
               onTap: a.onTap,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    decoration: BoxDecoration(
-                      color: TourPakColors.forestGreen
-                          .withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.08),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                decoration: BoxDecoration(
+                  color: TourPakColors.forestGreen
+                      .withValues(alpha: 0.7),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.08),
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    Icon(a.icon, color: a.color, size: 22),
+                    const SizedBox(height: 6),
+                    Text(
+                      a.label,
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: TourPakColors.textPrimary,
                       ),
                     ),
-                    child: Column(
-                      children: [
-                        Icon(a.icon, color: a.color, size: 22),
-                        const SizedBox(height: 6),
-                        Text(
-                          a.label,
-                          style: GoogleFonts.inter(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: TourPakColors.textPrimary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  ],
                 ),
               ),
             ),
@@ -777,6 +853,9 @@ class _PhotoGallery extends StatelessWidget {
                     child: CachedNetworkImage(
                       imageUrl: urls[index],
                       fit: BoxFit.cover,
+                      memCacheWidth: 200,
+                      memCacheHeight: 200,
+                      fadeInDuration: const Duration(milliseconds: 200),
                       placeholder: (_, _) =>
                           Container(color: TourPakColors.forestLight),
                       errorWidget: (_, _, _) => Container(
@@ -844,7 +923,7 @@ class _FullScreenGalleryState extends State<_FullScreenGallery> {
 
   @override
   Widget build(BuildContext context) {
-    final topInset = MediaQuery.of(context).padding.top;
+    final topInset = MediaQuery.paddingOf(context).top;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -924,7 +1003,7 @@ class _BottomActionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.of(context).padding.bottom;
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
 
     return Positioned(
       left: 0,
@@ -943,89 +1022,385 @@ class _BottomActionBar extends StatelessWidget {
         ),
         child: Row(
           children: [
+            // Left: elevation + best time caption
             Expanded(
-              child: GestureDetector(
-                onTap: () {
-                  if (spot.hasCoordinates) {
-                    final url = Uri.parse(
-                      'https://www.google.com/maps/dir/?api=1&destination='
-                      '${spot.latitude},${spot.longitude}',
-                    );
-                    launchUrl(url, mode: LaunchMode.externalApplication);
-                  }
-                },
-                child: Container(
-                  height: 50,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: TourPakColors.goldAction,
-                      width: 1.5,
-                    ),
-                  ),
-                  child: Center(
-                    child: Text(
-                      'Get Directions',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (spot.altitude != null)
+                    Text(
+                      '\u{1F3D4} ${spot.altitude!.toInt()}m elevation',
                       style: GoogleFonts.inter(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: TourPakColors.goldAction,
-                        letterSpacing: 0.5,
+                        fontSize: 12,
+                        color: TourPakColors.textSecondary,
                       ),
                     ),
-                  ),
-                ),
+                  if (spot.bestTime != null)
+                    Text(
+                      '\u{1F4C5} ${spot.bestTime}',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: TourPakColors.textSecondary,
+                      ),
+                    ),
+                ],
               ),
             ),
             const SizedBox(width: 12),
-            Expanded(
-              child: GestureDetector(
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        'Saved ${spot.name} to your trip!',
-                        style: GoogleFonts.inter(fontSize: 14),
-                      ),
-                      backgroundColor: TourPakColors.forestLight,
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                    ),
+            // Right: Directions amber button
+            GestureDetector(
+              onTap: () {
+                if (spot.hasCoordinates) {
+                  MapsService.openDirections(
+                    spot.latitude!, spot.longitude!, spot.name,
                   );
-                },
-                child: Container(
-                  height: 50,
-                  decoration: BoxDecoration(
-                    color: TourPakColors.goldAction,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Center(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'Save to Trip',
-                          style: GoogleFonts.inter(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: TourPakColors.obsidian,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        const Icon(
-                          Icons.favorite_border_rounded,
-                          color: TourPakColors.obsidian,
-                          size: 18,
-                        ),
-                      ],
+                }
+              },
+              child: Container(
+                width: 120,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE8A838),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.navigation_rounded,
+                        color: Colors.white, size: 16),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Directions',
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// MAP & DIRECTIONS SECTION
+// ══════════════════════════════════════════════════════════════
+
+class _MapDirectionsSection extends StatelessWidget {
+  final Spot spot;
+
+  const _MapDirectionsSection({required this.spot});
+
+  @override
+  Widget build(BuildContext context) {
+    final center = LatLng(spot.latitude!, spot.longitude!);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Section title
+        Row(
+          children: [
+            const Icon(Icons.location_on_rounded,
+                color: TourPakColors.goldAction, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              'Location & Directions',
+              style: GoogleFonts.playfairDisplay(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: TourPakColors.textPrimary,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+
+        // FlutterMap
+        ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: SizedBox(
+            height: 230,
+            child: FlutterMap(
+              options: MapOptions(
+                initialCenter: center,
+                initialZoom: 13.5,
+              ),
+              children: [
+                TileLayer(
+                  urlTemplate:
+                      'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'com.tourpak.app',
+                ),
+                MarkerLayer(
+                  markers: [
+                    Marker(
+                      point: center,
+                      width: 40,
+                      height: 40,
+                      child: Icon(
+                        Icons.location_on,
+                        color: _markerColorForCategory(spot.category),
+                        size: 40,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+
+        // Coordinates caption
+        Text(
+          '${spot.latitude!.toStringAsFixed(4)}\u{00B0}N, '
+          '${spot.longitude!.toStringAsFixed(4)}\u{00B0}E',
+          style: GoogleFonts.inter(
+            fontSize: 12,
+            color: TourPakColors.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Directions button (amber CTA)
+        GestureDetector(
+          onTap: () => MapsService.openDirections(
+            spot.latitude!, spot.longitude!, spot.name,
+          ),
+          child: Container(
+            height: 52,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: const Color(0xFFE8A838),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.navigation_rounded,
+                    color: Colors.white, size: 20),
+                const SizedBox(width: 10),
+                Text(
+                  'Get Directions from My Location',
+                  style: GoogleFonts.inter(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+
+        // "Open in Maps" text button
+        Center(
+          child: GestureDetector(
+            onTap: () => MapsService.openInMaps(
+              spot.latitude!, spot.longitude!, spot.name,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Text(
+                'Open in Maps',
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: TourPakColors.textSecondary,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  static Color _markerColorForCategory(String? category) {
+    return switch (category?.toLowerCase()) {
+      'lake' => const Color(0xFF00BCD4),
+      'valley' || 'forest' => const Color(0xFF4CAF50),
+      'historical' || 'museum' || 'archaeological' => const Color(0xFFFFC107),
+      'waterfall' => const Color(0xFF00ACC1),
+      'ski resort' => const Color(0xFF9C27B0),
+      _ => const Color(0xFFE53935),
+    };
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// NEARBY SPOTS — horizontal scroll of 3 closest siblings
+// ══════════════════════════════════════════════════════════════
+
+class _NearbySpotsSection extends ConsumerWidget {
+  final Spot spot;
+  final String destinationId;
+
+  const _NearbySpotsSection({
+    required this.spot,
+    required this.destinationId,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final spotsAsync = ref.watch(spotsByDestinationProvider(destinationId));
+
+    return spotsAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, _) => const SizedBox.shrink(),
+      data: (spots) {
+        // Remove current spot
+        var others = spots.where((s) => s.id != spot.id).toList();
+        if (others.isEmpty) return const SizedBox.shrink();
+
+        // Sort by distance from current spot if possible
+        if (spot.hasCoordinates) {
+          others = MapsService.sortByDistance(
+            others, spot.latitude!, spot.longitude!,
+          );
+        }
+
+        final nearby = others.take(3).toList();
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'You might also like',
+              style: GoogleFonts.playfairDisplay(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: TourPakColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              height: 160,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: nearby.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 12),
+                itemBuilder: (context, index) {
+                  final s = nearby[index];
+                  String? distanceText;
+                  if (spot.hasCoordinates && s.hasCoordinates) {
+                    final dist = MapsService.distanceBetween(
+                      spot.latitude!, spot.longitude!,
+                      s.latitude!, s.longitude!,
+                    );
+                    distanceText = MapsService.formatDistance(dist);
+                  }
+                  return _NearbySpotCard(
+                    spot: s,
+                    distanceText: distanceText,
+                    onTap: () => context.push(
+                      '/destination/$destinationId/spot/${s.id}',
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
+        );
+      },
+    );
+  }
+}
+
+// ── Small card for nearby spot ──────────────────────────────
+
+class _NearbySpotCard extends StatelessWidget {
+  final Spot spot;
+  final String? distanceText;
+  final VoidCallback onTap;
+
+  const _NearbySpotCard({
+    required this.spot,
+    this.distanceText,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: SizedBox(
+        width: 150,
+        height: 160,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              CachedNetworkImage(
+                imageUrl: spot.heroImageUrl ?? '',
+                fit: BoxFit.cover,
+                memCacheWidth: 300,
+                memCacheHeight: 320,
+                fadeInDuration: const Duration(milliseconds: 200),
+                placeholder: (_, _) =>
+                    Container(color: TourPakColors.forestGreen),
+                errorWidget: (_, _, _) => Container(
+                  color: TourPakColors.forestGreen,
+                  child: const Icon(Icons.terrain_rounded,
+                      color: TourPakColors.textSecondary, size: 24),
+                ),
+              ),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    stops: const [0.0, 0.4, 1.0],
+                    colors: [
+                      Colors.transparent,
+                      Colors.black.withValues(alpha: 0.1),
+                      Colors.black.withValues(alpha: 0.8),
+                    ],
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 10,
+                right: 10,
+                bottom: 10,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      spot.name,
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: TourPakColors.textPrimary,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (distanceText != null)
+                      Text(
+                        distanceText!,
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          color: TourPakColors.textSecondary,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

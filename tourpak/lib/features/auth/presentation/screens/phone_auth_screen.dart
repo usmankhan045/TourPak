@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:tourpak/core/router/app_router.dart';
 import 'package:tourpak/core/theme/colors.dart';
 import 'package:tourpak/core/theme/text_styles.dart';
 import 'package:tourpak/core/widgets/cinematic_hero.dart';
@@ -41,7 +40,7 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
     // Navigate to OTP screen when OTP is sent
     ref.listen(authNotifierProvider, (prev, next) {
       if (next.status == AuthStatus.otpSent) {
-        context.pushNamed(AppRoutes.otpVerification);
+        context.pushNamed('otp-verification');
       }
     });
 

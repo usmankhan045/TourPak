@@ -20,4 +20,5 @@ class SupabaseConstants {
   static const String destinationImagesBucket = 'destination-images';
   static const String spotImagesBucket = 'spot-images';
   static const String guidePhotosBucket = 'guide-photos';
+  static const String profilePhotosBucket = 'profile-photos';
 }

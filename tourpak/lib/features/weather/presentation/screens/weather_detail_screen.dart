@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -19,15 +17,38 @@ import '../widgets/weather_icon.dart';
 class WeatherDetailScreen extends ConsumerWidget {
   final String destinationId;
 
-  const WeatherDetailScreen({super.key, required this.destinationId});
+  /// Optional spot-specific coordinates. When provided, weather is
+  /// fetched for these coordinates instead of the destination's.
+  final double? lat;
+  final double? lng;
+  final String? locationName;
+
+  const WeatherDetailScreen({
+    super.key,
+    required this.destinationId,
+    this.lat,
+    this.lng,
+    this.locationName,
+  });
+
+  bool get _hasCoords => lat != null && lng != null;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final asyncWeather = ref.watch(weatherProvider(destinationId));
-    final asyncDest = ref.watch(destinationByIdProvider(destinationId));
-    final topInset = MediaQuery.of(context).padding.top;
+    // Use spot-specific coords when available, otherwise destination's.
+    final asyncWeather = _hasCoords
+        ? ref.watch(
+            weatherByCoordsFullProvider((lat: lat!, lng: lng!)))
+        : ref.watch(weatherProvider(destinationId));
 
-    final destName = asyncDest.whenOrNull(data: (d) => d.name) ?? '';
+    final topInset = MediaQuery.paddingOf(context).top;
+
+    // Resolve display name: explicit locationName > destination name
+    String displayName = locationName ?? '';
+    if (displayName.isEmpty) {
+      final asyncDest = ref.watch(destinationByIdProvider(destinationId));
+      displayName = asyncDest.whenOrNull(data: (d) => d.name) ?? '';
+    }
 
     return Scaffold(
       backgroundColor: TourPakColors.obsidian,
@@ -37,11 +58,18 @@ class WeatherDetailScreen extends ConsumerWidget {
         ),
         error: (e, _) => ErrorDisplay(
           message: 'Failed to load weather data.',
-          onRetry: () => ref.invalidate(weatherProvider(destinationId)),
+          onRetry: () {
+            if (_hasCoords) {
+              ref.invalidate(
+                  weatherByCoordsFullProvider((lat: lat!, lng: lng!)));
+            } else {
+              ref.invalidate(weatherProvider(destinationId));
+            }
+          },
         ),
         data: (data) => _WeatherContent(
           data: data,
-          destinationName: destName,
+          destinationName: displayName,
           topInset: topInset,
         ),
       ),
@@ -98,7 +126,7 @@ class _WeatherContent extends StatelessWidget {
 
             // Horizontal scroll forecast chips
             SizedBox(
-              height: 110,
+              height: 140,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 itemCount: data.forecast.length,
@@ -133,24 +161,18 @@ class _Header extends StatelessWidget {
       children: [
         GestureDetector(
           onTap: () => context.pop(),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(50),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-              child: Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: TourPakColors.forestGreen.withValues(alpha: 0.6),
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.1),
-                  ),
-                ),
-                child: const Icon(Icons.arrow_back_rounded,
-                    color: TourPakColors.textPrimary, size: 20),
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: TourPakColors.forestGreen.withValues(alpha: 0.7),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.1),
               ),
             ),
+            child: const Icon(Icons.arrow_back_rounded,
+                color: TourPakColors.textPrimary, size: 20),
           ),
         ),
         const SizedBox(width: 14),
@@ -193,28 +215,17 @@ class _CurrentWeatherCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: TourPakColors.forestGreen.withValues(alpha: 0.5),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: TourPakColors.goldAction.withValues(alpha: 0.1),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.3),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: Column(
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: TourPakColors.forestGreen.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: TourPakColors.goldAction.withValues(alpha: 0.1),
+        ),
+      ),
+      child: Column(
             children: [
               // Icon + Temperature
               Text(
@@ -249,8 +260,6 @@ class _CurrentWeatherCard extends StatelessWidget {
               ),
             ],
           ),
-        ),
-      ),
     );
   }
 }
@@ -329,58 +338,52 @@ class _TravelerMetrics extends StatelessWidget {
           physics: const NeverScrollableScrollPhysics(),
           mainAxisSpacing: 12,
           crossAxisSpacing: 12,
-          childAspectRatio: 1.5,
+          childAspectRatio: 1.3,
           children: metrics.map((m) {
-            return ClipRRect(
-              borderRadius: BorderRadius.circular(20),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                child: Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color:
-                        TourPakColors.forestGreen.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.08),
+            return Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color:
+                    TourPakColors.forestGreen.withValues(alpha: 0.7),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.08),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(m.icon, color: m.color, size: 22),
+                  const SizedBox(height: 8),
+                  Text(
+                    m.label,
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: TourPakColors.textSecondary,
                     ),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(m.icon, color: m.color, size: 22),
-                      const SizedBox(height: 8),
-                      Text(
-                        m.label,
-                        style: GoogleFonts.inter(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                          color: TourPakColors.textSecondary,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        m.value,
-                        style: GoogleFonts.inter(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: TourPakColors.textPrimary,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text(
-                        m.desc,
-                        style: GoogleFonts.inter(
-                          fontSize: 11,
-                          color: TourPakColors.textSecondary
-                              .withValues(alpha: 0.7),
-                        ),
-                      ),
-                    ],
+                  const SizedBox(height: 2),
+                  Text(
+                    m.value,
+                    style: GoogleFonts.inter(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: TourPakColors.textPrimary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
+                  Text(
+                    m.desc,
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      color: TourPakColors.textSecondary
+                          .withValues(alpha: 0.7),
+                    ),
+                  ),
+                ],
               ),
             );
           }).toList(),
@@ -403,55 +406,55 @@ class _ForecastChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final dayName = _shortDayName(forecast.date.weekday);
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: Container(
-          width: 80,
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: TourPakColors.forestGreen.withValues(alpha: 0.5),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.08),
+    return Container(
+      width: 80,
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        color: TourPakColors.forestGreen.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.08),
+        ),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            dayName,
+            style: GoogleFonts.inter(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: TourPakColors.textSecondary,
             ),
           ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                dayName,
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: TourPakColors.textSecondary,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
+          const SizedBox(height: 4),
+          SizedBox(
+            height: 32,
+            child: Center(
+              child: Text(
                 weatherIconEmoji(forecast.iconCode),
-                style: const TextStyle(fontSize: 28),
+                style: const TextStyle(fontSize: 24),
               ),
-              const SizedBox(height: 6),
-              Text(
-                '${forecast.maxTemp.round()}°',
-                style: GoogleFonts.inter(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: TourPakColors.textPrimary,
-                ),
-              ),
-              Text(
-                '${forecast.minTemp.round()}°',
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  color: TourPakColors.textSecondary,
-                ),
-              ),
-            ],
+            ),
           ),
-        ),
+          const SizedBox(height: 4),
+          Text(
+            '${forecast.maxTemp.round()}°',
+            style: GoogleFonts.inter(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: TourPakColors.textPrimary,
+            ),
+          ),
+          Text(
+            '${forecast.minTemp.round()}°',
+            style: GoogleFonts.inter(
+              fontSize: 11,
+              color: TourPakColors.textSecondary,
+            ),
+          ),
+        ],
       ),
     );
   }

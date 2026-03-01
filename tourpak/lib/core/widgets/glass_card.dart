@@ -1,12 +1,10 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:tourpak/core/theme/colors.dart';
 
 /// Glassmorphism card following the TourPak Style Guard.
 ///
-/// Renders a frosted-glass surface with configurable blur, tint, and border.
-/// Wrap it around any child widget for a premium glass effect on dark
-/// backgrounds.
+/// Uses a semi-transparent tinted surface with border for a glass effect
+/// on dark backgrounds — without expensive BackdropFilter blur.
 class GlassCard extends StatelessWidget {
   final Widget child;
   final double borderRadius;
@@ -44,32 +42,17 @@ class GlassCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget card = ClipRRect(
-      borderRadius: BorderRadius.circular(borderRadius),
-      child: RepaintBoundary(
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-          child: Container(
-            padding: padding,
-            decoration: BoxDecoration(
-              color: tint.withValues(alpha: tintOpacity),
-              borderRadius: BorderRadius.circular(borderRadius),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: borderOpacity),
-                width: 1.0,
-              ),
-              boxShadow: const [
-                BoxShadow(
-                  color: Colors.black38,
-                  blurRadius: 12,
-                  offset: Offset(0, 4),
-                ),
-              ],
-            ),
-            child: child,
-          ),
+    Widget card = Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: tint.withValues(alpha: tintOpacity),
+        borderRadius: BorderRadius.circular(borderRadius),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: borderOpacity),
+          width: 1.0,
         ),
       ),
+      child: child,
     );
 
     if (onTap != null) {

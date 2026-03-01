@@ -17,6 +17,28 @@ class WeatherApiClient {
 
   String get _apiKey => dotenv.env['OPENWEATHER_API_KEY']!;
 
+  // ── In-memory cache for coords-based lookups ──────────────
+  static const _memCacheTtl = Duration(minutes: 30);
+  final Map<String, (WeatherDto, DateTime)> _memCache = {};
+
+  /// Fetches current weather for [lat], [lng] with an in-memory
+  /// 30-minute cache.  Returns `null` on any error.
+  Future<WeatherDto?> getWeatherByCoordsCached(double lat, double lng) async {
+    final key = '${lat.toStringAsFixed(2)}_${lng.toStringAsFixed(2)}';
+    final cached = _memCache[key];
+    if (cached != null &&
+        DateTime.now().difference(cached.$2) < _memCacheTtl) {
+      return cached.$1;
+    }
+    try {
+      final dto = await getCurrentWeather(lat, lng);
+      _memCache[key] = (dto, DateTime.now());
+      return dto;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Fetches current weather for [lat], [lng].
   Future<WeatherDto> getCurrentWeather(double lat, double lng) async {
     final response = await _dio.get(

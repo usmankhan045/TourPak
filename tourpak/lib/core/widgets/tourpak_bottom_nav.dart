@@ -19,6 +19,7 @@ class _NavTab {
 const _tabs = [
   _NavTab(icon: Icons.home_outlined, activeIcon: Icons.home_rounded, label: 'Home'),
   _NavTab(icon: Icons.explore_outlined, activeIcon: Icons.explore_rounded, label: 'Explore'),
+  _NavTab(icon: Icons.map_outlined, activeIcon: Icons.map_rounded, label: 'Map'),
   _NavTab(icon: Icons.favorite_outline_rounded, activeIcon: Icons.favorite_rounded, label: 'Saved'),
   _NavTab(icon: Icons.person_outline_rounded, activeIcon: Icons.person_rounded, label: 'Profile'),
 ];

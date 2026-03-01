@@ -27,6 +27,11 @@ final authStateProvider = StreamProvider<bool>((ref) {
   return controller.stream;
 });
 
+/// Guest-mode flag — when true, the user can browse the app without signing in.
+/// Set to `true` when the user taps "Browse as Guest" on the login screen.
+/// Reset to `false` when the user signs in or signs out.
+final guestModeProvider = StateProvider<bool>((ref) => false);
+
 /// Synchronous check: is the user currently authenticated?
 bool isAuthenticated() {
   return Supabase.instance.client.auth.currentSession != null;
